@@ -25,6 +25,10 @@ public class Transformer extends Writer {
         df = cleanData(df);
         df = exampleWindowFunction(df);
         df = columnSelection(df);
+        df = funAgeRange(df);
+        df = setRankByNationalityPosition(df);
+        df = setPotentialVsOverall(df);
+        df = filterResult(df);
 
         // for show 100 records after your transformations and show the Dataset schema
         df.show(100, false);
@@ -37,8 +41,14 @@ public class Transformer extends Writer {
     private Dataset<Row> columnSelection(Dataset<Row> df) {
         return df.select(
                 shortName.column(),
-                overall.column(),
+                longName.column(),
+                age.column(),
                 heightCm.column(),
+                weightKg.column(),
+                nationality.column(),
+                clubName.column(),
+                overall.column(),
+                potential.column(),
                 teamPosition.column(),
                 catHeightByPosition.column()
         );
@@ -96,7 +106,52 @@ public class Transformer extends Writer {
         return df;
     }
 
+public static Dataset<Row> funAgeRange(Dataset<Row> df) {
+        Column rule = when(df.col("age").$less(23), "A")
+                .when(df.col("age").$greater(23).and(df.col("age").$less(27)), "B")
+                .when(df.col("age").$greater(27).and(df.col("age").$less(32)), "C")
+                .otherwise("D");
+        df = df.withColumn(ageRange.getName(), rule);
+        return df;
+    }
 
+
+    private Dataset<Row> setRankByNationalityPosition(Dataset<Row> df) {
+        WindowSpec w = Window
+                .partitionBy(nationality.column(), teamPosition.column())
+                .orderBy(overall.column().desc());
+
+        df = df.withColumn(rankByNationalityPosition.getName(), row_number().over(w));
+        return df;
+    }
+
+    public static Dataset<Row> setPotentialVsOverall(Dataset<Row> df) {
+
+        return df.withColumn(potentialVsOverall.getName(), col(potential.getName()).divide(col(overall.getName())));
+    }
+
+
+
+    private Dataset<Row> filterResult(Dataset<Row> df) {
+        Column ageRangeCol = ageRange.column();
+        Column rankByNationalityPositionColumn = rankByNationalityPosition.column();
+        Column potentialVsOverallColumn = potentialVsOverall.column();
+
+        return df.filter(
+                rankByNationalityPositionColumn
+                        .$less(3)
+                        .or(
+                                ageRangeCol.equalTo("B").or(ageRangeCol.equalTo("C")).and(potentialVsOverallColumn.$greater(1.15))
+                        )
+                        .or(
+                                ageRangeCol.equalTo("A").and(potentialVsOverallColumn.$greater(1.25))
+                        )
+                        .or(
+                                ageRangeCol.equalTo("D").and(rankByNationalityPositionColumn.$less(5))
+                        )
+
+        );
+    }
 
 
 }

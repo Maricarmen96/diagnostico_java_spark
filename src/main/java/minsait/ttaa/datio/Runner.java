@@ -9,6 +9,7 @@ public class Runner {
     static SparkSession spark = SparkSession
             .builder()
             .master(SPARK_MODE)
+            .config("spark.debug.maxToStringFields",1000)
             .getOrCreate();
 
     public static void main(String[] args) {
